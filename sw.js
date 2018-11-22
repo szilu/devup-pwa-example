@@ -10,9 +10,11 @@ const PRECACHE_URLS = [
 function onInstall(evt) {
 	evt.waitUntil(async function() {
 		console.log('SW INSTALL')
-		// Cache feltöltése
+		// Fill cache
 		let cache = await caches.open(CACHE)
 		await cache.addAll(PRECACHE_URLS)
+		// WARNING: This does not wait for clients to exit, service worker is
+		// activated immediately. This can be dangerious!
 		self.skipWaiting()
 	}())
 }
@@ -20,22 +22,24 @@ function onInstall(evt) {
 function onActivate(evt) {
 	evt.waitUntil(async function() {
 		console.log('SW ACTIVATE')
-		// Elavult cache-ek eldobása
+		// Drop old caches
 		let cacheList = (await caches.keys()).filter(name => name !== CACHE)
 		await Promise.all(cacheList.map(name => caches.delete(name)))
+		// WARNING: Does not wait for clients to exit, service worker is
+		// claiming all running clients immediately. This can be dangerious!
 		await self.clients.claim()
 	}())
 }
 
 function onFetch(evt) {
-	// Csak a saját origin-re szóló GET kérésekkel foglalkozunk, minden másra
-	// default handler
+	// We handle only GET requests for our own origin. Any other request is
+	// handled by the default handler
 	if (evt.request.method !== 'GET' || !evt.request.url.startsWith(self.location.origin)) {
 		return
 	}
 
 	evt.respondWith(async function() {
-		// Először keres a cache-ben
+		// First search in the cache
 		let res = await caches.match(evt.request)
 		if (res) {
 			console.log('SW CACHE', evt.request.url)
@@ -43,7 +47,7 @@ function onFetch(evt) {
 		}
 		let cache = await caches.open(CACHE)
 		try {
-			// Ha nincs cache-ben, akkor fetch(), majd elhelyezi cache-ben
+			// If not in cache, then fetch(), then store in cache
 			console.log('SW FETCH', evt.request.url)
 			res = await fetch(evt.request)
 			await cache.put(evt.request, res.clone())
